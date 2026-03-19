@@ -47,15 +47,13 @@ export async function getAvailableSlots(dateString: string, duration: number): P
 
         console.log(`[Slots] Time range: ${startStr} - ${endStr}`);
 
-        // Fetch existing bookings for the day
-        const dayStart = new Date(dateString);
-        dayStart.setHours(0, 0, 0, 0);
-        const dayEnd = new Date(dateString);
-        dayEnd.setHours(23, 59, 59, 999);
+        // Fetch existing bookings for the day (IST boundaries)
+        const dayStartIST = createISTDate(dateString, 0, 0);
+        const dayEndIST = createISTDate(dateString, 23, 59);
 
         const existingBookings = await prisma.appointment.findMany({
             where: {
-                date: { gte: dayStart, lte: dayEnd },
+                date: { gte: dayStartIST, lte: dayEndIST },
                 status: { not: "CANCELLED" }
             }
         });
@@ -71,26 +69,38 @@ export async function getAvailableSlots(dateString: string, duration: number): P
     }
 }
 
+// IST is UTC+5:30 = 330 minutes ahead of UTC
+const IST_OFFSET_MINUTES = 330;
+
+/**
+ * Creates a Date object representing a specific time in IST,
+ * regardless of the server's local timezone.
+ * e.g. createISTDate("2026-03-19", 19, 30) => a Date whose UTC value
+ * corresponds to 19:30 IST on that day (i.e. 14:00 UTC).
+ */
+function createISTDate(dateString: string, hours: number, minutes: number): Date {
+    const [year, month, day] = dateString.split("-").map(Number);
+    // Build the date in UTC first, then subtract IST offset to get correct UTC instant
+    const utc = Date.UTC(year, month - 1, day, hours, minutes, 0, 0);
+    return new Date(utc - IST_OFFSET_MINUTES * 60 * 1000);
+}
+
 function generateSlotsForTimeRange(dateString: string, startStr: string, endStr: string, duration: number, existingBookings: any[]): string[] {
     const startHour = parseInt(startStr.split(":")[0]);
     const startMin = parseInt(startStr.split(":")[1]);
     const endHour = parseInt(endStr.split(":")[0]);
     const endMin = parseInt(endStr.split(":")[1]);
 
-    const targetDate = new Date(dateString);
+    const currentSlot = createISTDate(dateString, startHour, startMin);
+    const endTime = createISTDate(dateString, endHour, endMin);
+
     const slots: Date[] = [];
-
-    const current = new Date(targetDate);
-    current.setHours(startHour, startMin, 0, 0);
-
-    const end = new Date(targetDate);
-    end.setHours(endHour, endMin, 0, 0);
 
     // Limit to safety max (e.g. don't go infinite loop)
     let count = 0;
-    while (current < end && count < 50) {
-        slots.push(new Date(current));
-        current.setMinutes(current.getMinutes() + duration);
+    while (currentSlot < endTime && count < 50) {
+        slots.push(new Date(currentSlot));
+        currentSlot.setMinutes(currentSlot.getMinutes() + duration);
         count++;
     }
 
