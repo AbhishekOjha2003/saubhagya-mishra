@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Doctor {
+  id          String   @id @default(uuid())
+  name        String
+  email       String   @unique
+  phone       String?
+  designation String   @default("Advocate")
+  availability String  @default("{}") 
+  
+  appointments Appointment[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Appointment {
+  id          String   @id @default(uuid())
+  
+  clientName  String
+  clientEmail String
+  clientPhone String
+  caseType    String
+  description String?
+
+  date        DateTime
+  duration    Int      // 15 or 30 minutes
+  mode        String   @default("ONLINE")
+  status      String   @default("PENDING")
+  
+  payment     Payment? 
+
+  doctorId    String
+  doctor      Doctor   @relation(fields: [doctorId], references: [id])
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Payment {
+  id            String      @id @default(uuid())
+  amount        Float
+  currency      String      @default("INR")
+  status        String      @default("PENDING")
+  transactionId String?
+  
+  appointmentId String      @unique
+  appointment   Appointment @relation(fields: [appointmentId], references: [id])
+  
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
